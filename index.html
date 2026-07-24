@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zombie Mod RPG (2011) | MTA:SA</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero__copy">
+        <p class="kicker">MTA: San Andreas</p>
+        <h1>Zombie Mod RPG (2011)</h1>
+        <p class="lead">A survival RPG server with progression, safe zones, missions, crafting, factions, vehicle shops, and roaming zombie waves.</p>
+        <div class="actions">
+          <a class="button primary" href="mtasa://141.105.130.229:22003">Join Server</a>
+          <button class="button" id="copyAddress" type="button">Copy IP</button>
+        </div>
+      </div>
+      <div class="status-panel" aria-live="polite">
+        <div class="status-line">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusText">Checking server...</span>
+        </div>
+        <div class="metric">
+          <span>Online</span>
+          <strong id="players">- / 100</strong>
+        </div>
+        <div class="metric">
+          <span>Map</span>
+          <strong id="map">-</strong>
+        </div>
+        <div class="metric">
+          <span>Mode</span>
+          <strong id="gamemode">Zombie RPG</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article>
+        <h2>Address</h2>
+        <p class="server-address">141.105.130.229:22003</p>
+        <p>Connect through the MTA server browser or use the quick join link above.</p>
+      </article>
+      <article>
+        <h2>Features</h2>
+        <ul>
+          <li>100 player slots</li>
+          <li>Zombie Survival RPG</li>
+          <li>Account-based progression</li>
+          <li>Crafting, missions, factions, and shops</li>
+        </ul>
+      </article>
+      <article class="wide">
+        <h2>Recent Events</h2>
+        <div class="log" id="events">Server events will appear after startup.</div>
+      </article>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

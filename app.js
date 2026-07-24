@@ -1,4 +1,5 @@
 const address = "141.105.130.229:22003";
+const statusApiUrl = "https://141.105.130.229.sslip.io/mta/api/status";
 const players = document.querySelector("#players");
 const map = document.querySelector("#map");
 const gamemode = document.querySelector("#gamemode");
@@ -23,7 +24,7 @@ function setStatus(online) {
 
 async function refresh() {
   try {
-    const response = await fetch("/api/status", { cache: "no-store" });
+    const response = await fetch(statusApiUrl, { cache: "no-store" });
     const data = await response.json();
     setStatus(Boolean(data.online));
     players.textContent = `${data.players ?? 0} / ${data.maxplayers ?? 100}`;

@@ -1,6 +1,6 @@
 # MTA:SA Zombie Mod RPG Website
 
-Static status page for the **Zombie Mod RPG (2011)** Multi Theft Auto: San Andreas server.
+GitHub Pages frontend for the **Zombie Mod RPG (2011)** Multi Theft Auto: San Andreas server.
 
 ## Server
 
@@ -19,13 +19,13 @@ Static status page for the **Zombie Mod RPG (2011)** Multi Theft Auto: San Andre
 
 ## MTA Status API
 
-The frontend polls:
+The frontend runs from GitHub Pages and polls the mini backend on the VPS:
 
 ```text
-/api/status
+https://141.105.130.229.sslip.io/mta/api/status
 ```
 
-For VPS deployment, run `backend/mta_status_api.py` on the same machine as the MTA server and proxy `/api/status` to it with nginx.
+For VPS deployment, run `backend/mta_status_api.py` on the same machine as the MTA server and proxy `/mta/api/status` to it with nginx.
 
 The API reads live MTA data from the ASE UDP port, which is `serverport + 123`. With the default MTA port this is:
 

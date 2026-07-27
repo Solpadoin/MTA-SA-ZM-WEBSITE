@@ -393,16 +393,28 @@ h2 {
 }
 
 .entity-icon {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.entity-marker {
+  --entity-marker-size: 14px;
   position: relative;
-  width: 14px !important;
-  height: 14px !important;
-  margin: -7px 0 0 -7px !important;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--entity-marker-size) * var(--entity-marker-scale, 1));
+  height: calc(var(--entity-marker-size) * var(--entity-marker-scale, 1));
+  display: block;
   border: 2px solid rgba(255, 255, 255, 0.9);
   border-radius: 50%;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  transition: width 160ms ease-out, height 160ms ease-out;
 }
 
-.entity-icon::after {
+.entity-marker::after {
   content: "";
   position: absolute;
   inset: 3px;
@@ -410,39 +422,32 @@ h2 {
   background: rgba(255, 255, 255, 0.4);
 }
 
-.entity-icon.player {
+.entity-marker.player {
   background: var(--blue);
 }
 
-.entity-icon.offline {
+.entity-marker.offline {
   border-color: #ddd;
   background: var(--black);
   opacity: 0.78;
 }
 
-.entity-icon.zombie {
-  width: 10px !important;
-  height: 10px !important;
-  margin: -5px 0 0 -5px !important;
+.entity-marker.zombie {
+  --entity-marker-size: 10px;
   border-width: 1px;
   background: var(--red);
 }
 
-.entity-icon.vehicle {
-  width: 12px !important;
-  height: 12px !important;
-  margin: -6px 0 0 -6px !important;
+.entity-marker.vehicle {
+  --entity-marker-size: 12px;
   border-radius: 3px;
   background: var(--amber);
 }
 
-.entity-icon.game-marker {
-  width: 13px !important;
-  height: 13px !important;
-  margin: -6px 0 0 -6px !important;
+.entity-marker.game-marker {
+  --entity-marker-size: 13px;
   border-radius: 2px 50% 50%;
   background: var(--violet);
-  transform-origin: center;
 }
 
 .leaflet-popup-content-wrapper,

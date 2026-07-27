@@ -19,6 +19,17 @@ L.imageOverlay("assets/gtasa-map.jpeg", WORLD_BOUNDS, {
 }).addTo(map);
 map.fitBounds(WORLD_BOUNDS, { padding: [8, 8] });
 
+const ENTITY_SCALE_BASE_ZOOM = map.getZoom();
+
+function updateEntityMarkerScale(zoom = map.getZoom()) {
+  const scale = Math.min(3, Math.max(0.8, 2 ** (zoom - ENTITY_SCALE_BASE_ZOOM)));
+  map.getContainer().style.setProperty("--entity-marker-scale", scale.toFixed(3));
+}
+
+map.on("zoomanim", (event) => updateEntityMarkerScale(event.zoom));
+map.on("zoomend", () => updateEntityMarkerScale());
+updateEntityMarkerScale();
+
 const layers = {
   players: L.layerGroup().addTo(map),
   offline: L.layerGroup().addTo(map),
@@ -79,8 +90,8 @@ function toLatLng(position) {
 
 function icon(type) {
   return L.divIcon({
-    className: `entity-icon ${type}`,
-    html: "",
+    className: "entity-icon",
+    html: `<span class="entity-marker ${type}"></span>`,
     iconSize: [14, 14],
     iconAnchor: [7, 7]
   });

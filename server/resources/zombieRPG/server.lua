@@ -33,6 +33,7 @@ battleShip2 = createObject ( 10770, 143, -2112.8095703125, 40.200000762939, 0, 0
 battleShip3 = createObject ( 11146, 130.6474609375, -2104.7998046875, 13.800000190735, 0, 0, 0 )
 battleShip4 = createObject ( 11145, 76.7998046875, -2105.2998046875, 5.8000001907349, 0, 0, 0 )
 battleShip5 = createObject ( 11149, 133.599609375, -2110.419921875, 13.479999542236, 0, 0, 0 )
+setElementFrozen(battleShip1, true)
 
 
 ----BATTLESHIP2 TO BATTLESHIP1;
@@ -225,26 +226,75 @@ materials3 = createMarker (-1296.47815, 490.59604, 10.49531, "cylinder", 1.5, 25
 materials4 = createMarker (32.01396, -2657.28564, 39.7, "cylinder", 1.5, 255, 0, 0, 170 )
 materials5 = createMarker (2729.32690,-2451.46069,16.79375, "cylinder", 1.5, 255, 0, 0, 170 )
 
-function onMaterialsTryTake(hitElement)
-	if getElementType(hitElement) ~= "player" then
+local MATERIAL_SUPPLY_COOLDOWN = 6 * 60 * 60
+local MATERIAL_SUPPLY_AMOUNT = 300
+
+executeSQLQuery([[
+	CREATE TABLE IF NOT EXISTS zmrpg_material_supply (
+		id INTEGER PRIMARY KEY,
+		next_available INTEGER NOT NULL
+	)
+]])
+executeSQLQuery(
+	"INSERT OR IGNORE INTO zmrpg_material_supply (id, next_available) VALUES (1, 0)"
+)
+
+local function materialSupplyAvailableAt()
+	local rows = executeSQLQuery(
+		"SELECT next_available FROM zmrpg_material_supply WHERE id = 1"
+	)
+	return tonumber(rows and rows[1] and rows[1].next_available) or 0
+end
+
+local function formatMaterialCooldown(seconds)
+	local hours = math.floor(seconds / 3600)
+	local minutes = math.floor((seconds % 3600) / 60)
+	local remainingSeconds = seconds % 60
+	return string.format("%02d:%02d:%02d", hours, minutes, remainingSeconds)
+end
+
+function onMaterialsTryTake(hitElement, matchingDimension)
+	if getElementType(hitElement) ~= "player" or not matchingDimension then
 		return
 	end
 
 	local account = getPlayerAccount(hitElement)
 	if isGuestAccount(account) then
+		outputChatBox("[Materials] Log in before collecting supplies.", hitElement, 255, 218, 121)
+		return
+	end
+
+	local now = getRealTime().timestamp
+	local nextAvailable = materialSupplyAvailableAt()
+	if now < nextAvailable then
+		outputChatBox(
+			"[Materials] The global supply is empty. Restock in "
+				.. formatMaterialCooldown(nextAvailable - now)
+				.. ".",
+			hitElement,
+			255,
+			218,
+			121
+		)
 		return
 	end
 
 	local materials = tonumber(getAccountData(account, "materials")) or 0
-	if materials >= 300 then
-		outputChatBox("[Crafting] Your material storage is full (300/300).", hitElement, 255, 218, 121)
-		return
-	end
-
-	local amount = math.min(math.random(35, 45), 300 - materials)
-	materials = materials + amount
+	materials = materials + MATERIAL_SUPPLY_AMOUNT
 	setAccountData(account, "materials", materials)
-	outputChatBox("[Crafting] Collected " .. amount .. " materials (" .. materials .. "/300).", hitElement, 141, 255, 106)
+	executeSQLQuery(
+		"UPDATE zmrpg_material_supply SET next_available = ? WHERE id = 1",
+		now + MATERIAL_SUPPLY_COOLDOWN
+	)
+	outputChatBox(
+		"[Materials] Collected "
+			.. MATERIAL_SUPPLY_AMOUNT
+			.. " materials. Global restock: 6 hours.",
+		hitElement,
+		141,
+		255,
+		106
+	)
 end
 addEventHandler("onMarkerHit",materials1,onMaterialsTryTake)
 addEventHandler("onMarkerHit",materials2,onMaterialsTryTake)
@@ -255,58 +305,9 @@ addEventHandler("onMarkerHit",materials5,onMaterialsTryTake)
 
 function checkMyMaterials(player)
 	local materials = tonumber(getAccountData(getPlayerAccount(player), "materials")) or 0
-	outputChatBox("[Crafting] You have " .. materials .. " materials.", player, 235, 235, 235)
+	outputChatBox("[Materials] You have " .. materials .. " materials.", player, 235, 235, 235)
 end
 addCommandHandler("materials",checkMyMaterials)
-
-
-function craftWeaponFromMaterials(player,command,weapon,ammo)
-	local materials = tonumber(getAccountData(getPlayerAccount(player), "materials")) or 0
-	triggerClientEvent(player, "open_menu_craft", player, materials)
-end
-addCommandHandler("weapon",craftWeaponFromMaterials)
-
-
-addEvent("trigger_craft_weapon",true)
-local CRAFTING_PRICES = {
-	[4] = 15, [9] = 20, [22] = 25, [23] = 25, [24] = 35,
-	[25] = 50, [29] = 50, [30] = 60, [31] = 65, [34] = 70, [35] = 100
-}
-
-function givePlayerCraftedWeapon(weaponName)
-	if client ~= source then
-		return
-	end
-
-	local weaponId = getWeaponIDFromName(tostring(weaponName))
-	local weaponCost = CRAFTING_PRICES[weaponId]
-	if not weaponCost then
-		return
-	end
-
-	local account = getPlayerAccount(source)
-	local materials = tonumber(getAccountData(account, "materials")) or 0
-	if materials >= weaponCost then
-		setAccountData(account, "materials", materials - weaponCost)
-		giveWeapon(source, weaponId, 30)
-		outputChatBox("[Crafting] You crafted " .. getWeaponNameFromID(weaponId) .. " with 30 rounds.", source, 141, 255, 106)
-	else
-		outputChatBox("[Crafting] Not enough materials.", source, 255, 218, 121)
-	end
-end
-addEventHandler("trigger_craft_weapon",getRootElement(),givePlayerCraftedWeapon)
-
-
-
-
-function BindKeys()
-	 bindKey(source, "F5", "down", showMenuOfCraftingWeapons)
-end
-addEventHandler("onPlayerLogin",getRootElement(),BindKeys)
-
-function showMenuOfCraftingWeapons(player)
-	triggerClientEvent(player,"open_menu_craft",player,getAccountData(getPlayerAccount(player),"materials"))
-end
 
 
 
@@ -792,28 +793,44 @@ addCommandHandler("fuel",onCheckFuel_LEFT)
 
 ---------RESPAWN VEHICLES----------------
 
-function isVehicleOccupied(vehicle)
-    assert(isElement(vehicle) and getElementType(vehicle) == "vehicle", "Bad argument @ isVehicleOccupied [expected vehicle, got " .. tostring(vehicle) .. "]")
-    local _, occupant = next(getVehicleOccupants(vehicle))
-    return occupant and true, occupant
+local function isManagedWorldVehicle(vehicle)
+	return getElementData(vehicle, "goverment_vehicles") == true
+		or getElementData(vehicle, "rentcar") == true
+		or getElementData(vehicle, "rew_auto") == true
 end
 
-setTimer(
-function()
-	for k,v in ipairs(getElementsByType("vehicle")) do
-		if (getElementData(v,"goverment_vehicles") == true) or (getElementData(v,"rentcar") == true) or (getElementData(v,"rew_auto") == true) then
-			if not isVehicleOccupied(v) then
-				respawnVehicle(v)
-				if (getElementData(v,"rew_auto") == true) then
-					setElementData(v,"car_owner",false)
-				end
-			end
+local function configureManagedVehicleRespawn(vehicle)
+	if not isManagedWorldVehicle(vehicle) then
+		return
+	end
+
+	toggleVehicleRespawn(vehicle, true)
+	setVehicleRespawnDelay(vehicle, 60000)
+	if getElementData(vehicle, "goverment_vehicles") == true then
+		setVehicleIdleRespawnDelay(vehicle, 300000)
+	else
+		setVehicleIdleRespawnDelay(vehicle, 600000)
+	end
+end
+
+addEventHandler("onResourceStart", resourceRoot, function()
+	for _, vehicle in ipairs(getElementsByType("vehicle")) do
+		configureManagedVehicleRespawn(vehicle)
+		if getElementData(vehicle, "rentcar") == true or getElementData(vehicle, "rew_auto") == true then
+			setElementData(vehicle, "car_owner", false)
 		end
 	end
-	outputChatBox("#FFA500[SERVER] #EEDC82Машины были доставлены на свои позиции!",getRootElement(),0,0,0,true)
-end
-, 600000, 0)
+end)
 
+addEventHandler("onVehicleRespawn", root, function()
+	if not isManagedWorldVehicle(source) then
+		return
+	end
+	if getElementData(source, "rentcar") == true or getElementData(source, "rew_auto") == true then
+		setElementData(source, "car_owner", false)
+	end
+	setVehicleEngineState(source, false)
+end)
 
 
 function onVehicleFindSOmeResources(thePlayer,seat)
@@ -960,11 +977,11 @@ adm6 = createVehicle(602,-2077.36670,-83.10181,35.16406,0,0,0) setElementData(ad
 adm7 = createVehicle(542,-2081.36670,-83.10181,35.16406,0,0,0) setElementData(adm7,"goverment_vehicles",true)
 adm8 = createVehicle(542,-2085.36670,-83.10181,35.16406,0,0,0) setElementData(adm8,"goverment_vehicles",true)
 adm9 = createVehicle(445,-22.67578125,-2524.75,36.723896026611,0,0,29.318695068359) setElementData(adm9,"goverment_vehicles",true)
-clover1 = createVehicle(542,-2444.24146,2224.84644,4.46804,0,0,0) setElementData(adm8,"goverment_vehicles",true)
-clover2 = createVehicle(542,-2447.24146,2224.84644,4.46804,0,0,0) setElementData(adm8,"goverment_vehicles",true)
-clover3 = createVehicle(542,-2451.24146,2224.84644,4.46804,0,0,0) setElementData(adm8,"goverment_vehicles",true)
-clover4 = createVehicle(542,-2454.24146,2224.84644,4.46804,0,0,0) setElementData(adm8,"goverment_vehicles",true)
-virgo1 = createVehicle(491,-2483.21387,2224.62939,4.38130,0,0,0) setElementData(adm8,"goverment_vehicles",true)
+clover1 = createVehicle(542,-2444.24146,2224.84644,4.46804,0,0,0) setElementData(clover1,"goverment_vehicles",true)
+clover2 = createVehicle(542,-2447.24146,2224.84644,4.46804,0,0,0) setElementData(clover2,"goverment_vehicles",true)
+clover3 = createVehicle(542,-2451.24146,2224.84644,4.46804,0,0,0) setElementData(clover3,"goverment_vehicles",true)
+clover4 = createVehicle(542,-2454.24146,2224.84644,4.46804,0,0,0) setElementData(clover4,"goverment_vehicles",true)
+virgo1 = createVehicle(491,-2483.21387,2224.62939,4.38130,0,0,0) setElementData(virgo1,"goverment_vehicles",true)
 
 tg1 = createVehicle(554,-142.0283203125,-2419.1513671875,32.761978149414,0,0,17.362640380859)
 setElementData(tg1,"goverment_vehicles",true)
@@ -993,8 +1010,8 @@ setElementData(veh15,"goverment_vehicles",true)
 veh16 = createVehicle(433,2073.7331542969,2677.8176269531,11.783824920654,-0.024839984253049,-0.3155582845211,0.66412365436554)
 setElementData(veh16,"goverment_vehicles",true)
 
-veh16 = createVehicle(433,2073.7331542969,2667.8176269531,11.783824920654,-0.024839984253049,-0.3155582845211,0.66412365436554)
-setElementData(veh16,"goverment_vehicles",true)
+veh16b = createVehicle(433,2073.7331542969,2667.8176269531,11.783824920654,-0.024839984253049,-0.3155582845211,0.66412365436554)
+setElementData(veh16b,"goverment_vehicles",true)
 
 veh17 = createVehicle(402,2004.8259277344,2746.4328613281,10.393509864807,0.030156765133142,4.7731513977051,90.670829772949)
 setElementData(veh17,"goverment_vehicles",true)
@@ -1179,73 +1196,6 @@ function BuyWeaponFromSklad(player,weaponName,Cost)
 end
 addEvent("trigger_sklad_buy_goods",true)
 addEventHandler("trigger_sklad_buy_goods",getRootElement(),BuyWeaponFromSklad)
-
-
-missions_mark1 = createMarker (-2597.31299, 2364.65918, 10.48300,"arrow", 1.2, 255, 255, 0, 50 )
-
-reguired_level = 3;					 ---- Уровень для доступа к миссиям.
-
-
-mission_first_reward = 300;
-mission_two_reward = 500; 		 --- Сколько заплатить за миссию.
-mission_three_reward = 1500;
-
-mission_secound_time = 60000; 	 --- Время в МС для того, что б обыскать зону.
-
-mss_call_event = false;          --- По умолчанию...
-
-
-function onPlayerMission_Marker_Hit(player)
-	if getElementType(player) ~= "player" then
-		return
-	end
-
-	local account = getPlayerAccount(player)
-	if isGuestAccount(account) then
-		return
-	end
-
-	local level = tonumber(getAccountData(account, "level_of_player")) or 1
-	if level >= reguired_level then
-		triggerClientEvent(player, "marker:mission_user_call", player, level)
-	else
-		outputChatBox("[Mission] You must be at least level " .. reguired_level .. " to accept missions.", player, 255, 218, 121)
-	end
-end
-addEventHandler("onMarkerHit",missions_mark1,onPlayerMission_Marker_Hit)
-
-addEvent("trigger_mission_first",true)
-function mission_first_call()
-	outputChatBox("[МИССИЯ] Доставьте ресурсы в указанную точку на карте(иконка 'МЕТКА')",source,255,255,0,false)
-end
-addEventHandler("trigger_mission_first",getRootElement(getThisResource()),mission_first_call)
-
-function mission_first_ended()
-	setElementData(source,"is_mission_compiting",nil)
-	givePlayerMoney(source,mission_first_reward)
-	outputChatBox("#EEE8AAВам было начислено: #6B8E23"..tostring(mission_first_reward).." денег #EEE8AAза успешное выполнение!",source,0,0,0,true)
-end
-addEvent("fist_mission_give_reward",true)
-addEventHandler("fist_mission_give_reward",getRootElement(getThisResource()),mission_first_ended)
-
-
-
----- SECOUND MISSION ----
-
-function onServerGotTriggered()
-	local x,y,z = getElementPosition(source)
-	local mis_veh = createVehicle (565, x, y, z, 0, 0, 0)
-	warpPedIntoVehicle(source,mis_veh)
-end
-addEvent("secound_mission_server_start",true)
-addEventHandler("secound_mission_server_start",getRootElement(getThisResource()),onServerGotTriggered)
-
-function giveRewardForSecoundMission()
-	givePlayerMoney(source,mission_two_reward)
-	outputChatBox("#EEE8AAВам было начислено: #6B8E23"..tostring(mission_two_reward).." денег #EEE8AAза успешное выполнение!",source,0,0,0,true)
-end
-addEvent("give_reward_secound_mission",true)
-addEventHandler("give_reward_secound_mission",getRootElement(getThisResource()),giveRewardForSecoundMission)
 
 
 Sx,Sy,Sz = getShipPosition()
@@ -1696,44 +1646,6 @@ end
 addEventHandler ( "onColShapeLeave", g_base_col, leave )
 
 
-
-
-function MoveBattleShip(player)
-	bindKey ( player, "num_8", "down", func_move )
-	bindKey ( player, "num_2", "down", func_moveBack )
-	bindKey ( player, "num_4", "down", func_moveLeft )
-	bindKey ( player, "num_6", "down", func_moveRight )
-end
-addCommandHandler("moveship",MoveBattleShip)
-
-function func_move(player,key,keyState)
-	local MainX,MainY,MainZ = getElementPosition(battleShip1)
-	mS_rotX,mS_rotY,mS_rotZ = getElementRotation(battleShip1)
-	if mS_rotZ == 0 then
-		moveObject ( battleShip1, 5000, MainX+30,MainY,MainZ )
-	elseif mS_rotZ > 0 and mS_rotZ < 90 then
-		moveObject ( battleShip1, 5000, MainX+30,MainY+30,MainZ )
-	elseif mS_rotZ > 90 and mS_rotZ < 180 then
-		moveObject ( battleShip1, 5000, MainX+30,MainY+30,MainZ )
-	elseif mS_rotZ > 180 and mS_rotZ < 360 then
-		moveObject ( battleShip1, 5000, MainX-30,MainY-30,MainZ )
-	end
-end
-
-function func_moveBack(player,key,keyState)
-	local MainX,MainY,MainZ = getElementPosition(battleShip1)
-	moveObject ( battleShip1, 5000, MainX-30,MainY,MainZ )
-end
-
-function func_moveLeft(player,key,keyState)
-	local rx,ry,rz = getElementRotation(battleShip1)
-	setElementRotation(battleShip1,rx,ry,rz+20)
-end
-
-function func_moveRight(player,key,keyState)
-	local rx,ry,rz = getElementRotation(battleShip1)
-	setElementRotation(battleShip1,rx,ry,rz-20)
-end
 
 
 function setPlayerPositionOnShip(player)

@@ -1,6 +1,19 @@
 const SERVER_ADDRESS = "141.105.130.229:22003";
 const API_BASE = "https://141.105.130.229.sslip.io/mta/api";
 const WORLD_BOUNDS = [[-3000, -3000], [3000, 3000]];
+const SESSION_KEY = "zmrpg.session";
+const STRIKES = {
+  artillery: { label: "Artillery strike", cost: 50 },
+  airstrike: { label: "Airstrike", cost: 75 }
+};
+
+const state = {
+  token: sessionStorage.getItem(SESSION_KEY),
+  user: null,
+  target: null,
+  pendingStrike: null,
+  toastTimer: null
+};
 
 const map = L.map("map", {
   crs: L.CRS.Simple,
@@ -64,7 +77,25 @@ const elements = {
   safeZoneLayerCount: document.querySelector("#safeZoneLayerCount"),
   updatedAt: document.querySelector("#updatedAt"),
   telemetryState: document.querySelector("#telemetryState"),
-  coordinateReadout: document.querySelector("#coordinateReadout")
+  coordinateReadout: document.querySelector("#coordinateReadout"),
+  loginButton: document.querySelector("#loginButton"),
+  accountSummary: document.querySelector("#accountSummary"),
+  accountName: document.querySelector("#accountName"),
+  materialBalance: document.querySelector("#materialBalance"),
+  logoutButton: document.querySelector("#logoutButton"),
+  loginModal: document.querySelector("#loginModal"),
+  loginForm: document.querySelector("#loginForm"),
+  loginUsername: document.querySelector("#loginUsername"),
+  loginPassword: document.querySelector("#loginPassword"),
+  loginSubmit: document.querySelector("#loginSubmit"),
+  loginError: document.querySelector("#loginError"),
+  strikeMenu: document.querySelector("#strikeMenu"),
+  confirmModal: document.querySelector("#confirmModal"),
+  confirmTitle: document.querySelector("#confirmTitle"),
+  confirmCoordinates: document.querySelector("#confirmCoordinates"),
+  confirmMessage: document.querySelector("#confirmMessage"),
+  confirmStrike: document.querySelector("#confirmStrike"),
+  toast: document.querySelector("#toast")
 };
 
 function escapeHtml(value) {
@@ -89,11 +120,14 @@ function toLatLng(position) {
 }
 
 function icon(type) {
+  const content = type === "vehicle"
+    ? `<span class="entity-marker vehicle"><i data-lucide="car-front"></i></span>`
+    : `<span class="entity-marker ${type}"></span>`;
   return L.divIcon({
     className: "entity-icon",
-    html: `<span class="entity-marker ${type}"></span>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7]
+    html: content,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
   });
 }
 
@@ -104,10 +138,10 @@ function popupRows(rows) {
 }
 
 function playerPopup(player) {
-  const state = player.online ? "Online" : "Offline";
+  const playerState = player.online ? "Online" : "Offline";
   return `
     <h3 class="popup-title">${escapeHtml(player.name)}
-      <span class="popup-state ${player.online ? "" : "offline"}">${state}</span>
+      <span class="popup-state ${player.online ? "" : "offline"}">${playerState}</span>
     </h3>
     ${popupRows([
       ["Money", `$${Number(player.money ?? 0).toLocaleString("en-US")}`],
@@ -197,7 +231,7 @@ function safeZonePopup(zone) {
     ${popupRows([
       ["Protection", "Zombie-proof"],
       ["Origin", `${Number(zone.x).toFixed(1)}, ${Number(zone.y).toFixed(1)}`],
-      ["Size", `${Number(zone.width).toFixed(0)} × ${Number(zone.height).toFixed(0)}`]
+      ["Size", `${Number(zone.width).toFixed(0)} x ${Number(zone.height).toFixed(0)}`]
     ])}`;
 }
 
@@ -262,7 +296,8 @@ function renderTelemetry(data) {
   const receivedAt = Number(data.receivedAt || data.generatedAt || 0) * 1000;
   elements.updatedAt.textContent = receivedAt ? `Updated ${new Date(receivedAt).toLocaleTimeString()}` : "Waiting for data";
   elements.telemetryState.className = `telemetry-state ${data.stale ? "stale" : "live"}`;
-  elements.telemetryState.querySelector("span").textContent = data.stale ? "Telemetry is delayed" : "Live · refreshes every 5 seconds";
+  elements.telemetryState.querySelector("span").textContent = data.stale ? "Telemetry is delayed" : "Live - refreshes every 5 seconds";
+  if (window.lucide) lucide.createIcons();
 }
 
 async function refreshTelemetry() {
@@ -289,11 +324,157 @@ async function refreshStatus() {
     const data = await response.json();
     setServerStatus(Boolean(data.online));
     elements.serverDetails.textContent = data.online
-      ? `${data.players ?? 0}/${data.maxplayers ?? 100} · ${data.gamemode || "Zombie Mod RPG"}`
+      ? `${data.players ?? 0}/${data.maxplayers ?? 100} - ${data.gamemode || "Zombie Mod RPG"}`
       : SERVER_ADDRESS;
   } catch (error) {
     setServerStatus(false);
     elements.serverDetails.textContent = SERVER_ADDRESS;
+  }
+}
+
+async function apiRequest(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
+  const response = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: "no-store" });
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = {};
+  }
+  if (!response.ok) {
+    const requestError = new Error(data.error || `Request failed with HTTP ${response.status}.`);
+    requestError.status = response.status;
+    throw requestError;
+  }
+  return data;
+}
+
+function renderAccount() {
+  const loggedIn = Boolean(state.user);
+  elements.loginButton.hidden = loggedIn;
+  elements.accountSummary.hidden = !loggedIn;
+  if (loggedIn) {
+    elements.accountName.textContent = state.user.username;
+    elements.materialBalance.textContent = Number(state.user.materials || 0).toLocaleString("en-US");
+  }
+  for (const button of elements.strikeMenu.querySelectorAll("[data-strike]")) {
+    const strike = STRIKES[button.dataset.strike];
+    button.disabled = !loggedIn || Number(state.user?.materials || 0) < strike.cost;
+  }
+}
+
+function clearSession() {
+  state.token = null;
+  state.user = null;
+  sessionStorage.removeItem(SESSION_KEY);
+  renderAccount();
+}
+
+async function refreshSession() {
+  if (!state.token) {
+    renderAccount();
+    return;
+  }
+  try {
+    const data = await apiRequest("/auth/session");
+    state.user = data.user;
+    renderAccount();
+  } catch (error) {
+    if (error.status === 401) clearSession();
+  }
+}
+
+function setModal(modal, visible) {
+  modal.hidden = !visible;
+  if (visible && modal === elements.loginModal) {
+    elements.loginError.textContent = "";
+    setTimeout(() => elements.loginUsername.focus(), 0);
+  }
+}
+
+function showToast(message, kind = "success") {
+  clearTimeout(state.toastTimer);
+  elements.toast.textContent = message;
+  elements.toast.className = `toast ${kind}`;
+  elements.toast.hidden = false;
+  state.toastTimer = setTimeout(() => {
+    elements.toast.hidden = true;
+  }, 5000);
+}
+
+function closeStrikeMenu() {
+  elements.strikeMenu.hidden = true;
+}
+
+function showStrikeMenu(event) {
+  if (!state.user) return;
+  state.target = {
+    x: Math.max(-3000, Math.min(3000, event.latlng.lng)),
+    y: Math.max(-3000, Math.min(3000, event.latlng.lat))
+  };
+  renderAccount();
+  const container = map.getContainer();
+  const menuWidth = 220;
+  const menuHeight = 116;
+  elements.strikeMenu.style.left = `${Math.max(8, Math.min(event.containerPoint.x, container.clientWidth - menuWidth - 8))}px`;
+  elements.strikeMenu.style.top = `${Math.max(8, Math.min(event.containerPoint.y, container.clientHeight - menuHeight - 8))}px`;
+  elements.strikeMenu.hidden = false;
+}
+
+function openStrikeConfirmation(type) {
+  const strike = STRIKES[type];
+  if (!strike || !state.target || !state.user) return;
+  if (Number(state.user.materials || 0) < strike.cost) {
+    showToast("Not enough materials.", "error");
+    return;
+  }
+  state.pendingStrike = { type, ...state.target };
+  elements.confirmTitle.textContent = strike.label;
+  elements.confirmCoordinates.textContent = `X ${state.target.x.toFixed(1)}, Y ${state.target.y.toFixed(1)}`;
+  elements.confirmMessage.textContent = `${strike.cost} materials will be deducted from ${state.user.username}.`;
+  elements.confirmStrike.textContent = `Confirm - ${strike.cost}`;
+  closeStrikeMenu();
+  setModal(elements.confirmModal, true);
+}
+
+async function pollAction(actionId) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const data = await apiRequest(`/actions/${encodeURIComponent(actionId)}`);
+      if (data.action.status === "completed" || data.action.status === "failed") {
+        await refreshSession();
+        showToast(data.action.message || "Strike request finished.", data.action.status === "completed" ? "success" : "error");
+        return;
+      }
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        return;
+      }
+    }
+  }
+  showToast("The strike is still queued on the game server.", "error");
+}
+
+async function submitStrike() {
+  if (!state.pendingStrike) return;
+  elements.confirmStrike.disabled = true;
+  try {
+    const data = await apiRequest("/actions", {
+      method: "POST",
+      body: JSON.stringify(state.pendingStrike)
+    });
+    setModal(elements.confirmModal, false);
+    showToast("Strike request queued.");
+    state.pendingStrike = null;
+    pollAction(data.action.id);
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    elements.confirmStrike.disabled = false;
   }
 }
 
@@ -316,14 +497,81 @@ elements.copyAddress.addEventListener("click", async () => {
   }, 1500);
 });
 
-map.on("mousemove", (event) => {
-  elements.coordinateReadout.textContent = `X ${event.latlng.lng.toFixed(1)} · Y ${event.latlng.lat.toFixed(1)}`;
+elements.loginButton.addEventListener("click", () => setModal(elements.loginModal, true));
+elements.logoutButton.addEventListener("click", async () => {
+  try {
+    await apiRequest("/auth/logout", { method: "POST", body: "{}" });
+  } catch (error) {
+    // A local logout still clears an expired or unreachable session.
+  }
+  clearSession();
+  closeStrikeMenu();
 });
 
-if (window.lucide) {
-  lucide.createIcons();
-}
+elements.loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  elements.loginError.textContent = "";
+  elements.loginSubmit.disabled = true;
+  elements.loginSubmit.textContent = "Signing in...";
+  try {
+    const data = await apiRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        username: elements.loginUsername.value.trim(),
+        password: elements.loginPassword.value
+      })
+    });
+    state.token = data.token;
+    state.user = data.user;
+    sessionStorage.setItem(SESSION_KEY, state.token);
+    elements.loginPassword.value = "";
+    renderAccount();
+    setModal(elements.loginModal, false);
+    showToast(`Signed in as ${state.user.username}.`);
+  } catch (error) {
+    elements.loginError.textContent = error.message;
+  } finally {
+    elements.loginSubmit.disabled = false;
+    elements.loginSubmit.textContent = "Sign in";
+  }
+});
+
+elements.strikeMenu.querySelectorAll("[data-strike]").forEach((button) => {
+  button.addEventListener("click", () => openStrikeConfirmation(button.dataset.strike));
+});
+elements.confirmStrike.addEventListener("click", submitStrike);
+
+document.querySelectorAll("[data-close-modal]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setModal(button.closest(".modal-backdrop"), false);
+    state.pendingStrike = null;
+  });
+});
+
+document.addEventListener("click", (event) => {
+  if (!elements.strikeMenu.hidden && !elements.strikeMenu.contains(event.target)) closeStrikeMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeStrikeMenu();
+    setModal(elements.loginModal, false);
+    setModal(elements.confirmModal, false);
+    state.pendingStrike = null;
+  }
+});
+
+map.getContainer().addEventListener("contextmenu", (event) => event.preventDefault());
+map.on("contextmenu", showStrikeMenu);
+map.on("movestart zoomstart", closeStrikeMenu);
+map.on("mousemove", (event) => {
+  elements.coordinateReadout.textContent = `X ${event.latlng.lng.toFixed(1)} - Y ${event.latlng.lat.toFixed(1)}`;
+});
+
+if (window.lucide) lucide.createIcons();
+renderAccount();
+refreshSession();
 refreshStatus();
 refreshTelemetry();
 setInterval(refreshStatus, 10000);
 setInterval(refreshTelemetry, 5000);
+setInterval(refreshSession, 10000);

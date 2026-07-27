@@ -7,7 +7,7 @@
   <title>Zombie Mod RPG (2011) | Live Map</title>
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="style.css?v=20260727-live-map-3">
+  <link rel="stylesheet" href="style.css?v=20260727-support-1">
 </head>
 <body>
   <div class="app">
@@ -26,6 +26,19 @@
       </div>
 
       <div class="topbar__actions">
+        <button class="account-button" id="loginButton" type="button">
+          <i data-lucide="user-round"></i>
+          <span>Sign in</span>
+        </button>
+        <div class="account-summary" id="accountSummary" hidden>
+          <div>
+            <strong id="accountName"></strong>
+            <span><b id="materialBalance">0</b> materials</span>
+          </div>
+          <button class="icon-button" id="logoutButton" type="button" title="Sign out" aria-label="Sign out">
+            <i data-lucide="log-out"></i>
+          </button>
+        </div>
         <button class="icon-button" id="copyAddress" type="button" title="Copy server address" aria-label="Copy server address">
           <i data-lucide="copy"></i>
         </button>
@@ -75,7 +88,7 @@
           </label>
           <label>
             <input type="checkbox" data-layer="vehicles" checked>
-            <span class="legend-dot vehicle"></span>
+            <span class="legend-icon vehicle"><i data-lucide="car-front"></i></span>
             <span>Vehicles</span>
             <strong id="vehicleLayerCount">0</strong>
           </label>
@@ -99,12 +112,76 @@
         </div>
       </aside>
 
-      <div class="coordinate-readout" id="coordinateReadout">X 0.0 · Y 0.0</div>
+      <div class="coordinate-readout" id="coordinateReadout">X 0.0 - Y 0.0</div>
+
+      <div class="map-context-menu" id="strikeMenu" role="menu" hidden>
+        <button type="button" data-strike="artillery" role="menuitem">
+          <i data-lucide="crosshair"></i>
+          <span><strong>Artillery strike</strong><small>50 materials</small></span>
+        </button>
+        <button type="button" data-strike="airstrike" role="menuitem">
+          <i data-lucide="plane"></i>
+          <span><strong>Airstrike</strong><small>75 materials</small></span>
+        </button>
+      </div>
     </main>
   </div>
 
+  <div class="modal-backdrop" id="loginModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <div class="modal__header">
+        <div>
+          <span class="eyebrow">Game account</span>
+          <h2 id="loginTitle">Sign in</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-modal title="Close" aria-label="Close">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form class="login-form" id="loginForm">
+        <label>
+          <span>Username</span>
+          <input id="loginUsername" name="username" autocomplete="username" maxlength="32" required>
+        </label>
+        <label>
+          <span>Password</span>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+        </label>
+        <p class="form-error" id="loginError" role="alert"></p>
+        <button class="primary-button" id="loginSubmit" type="submit">Sign in</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="confirmModal" hidden>
+    <section class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="modal__header">
+        <div>
+          <span class="eyebrow">Tactical support</span>
+          <h2 id="confirmTitle">Confirm strike</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-modal title="Close" aria-label="Close">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="confirmation">
+        <div class="confirmation__target">
+          <i data-lucide="map-pin"></i>
+          <span id="confirmCoordinates">X 0.0, Y 0.0</span>
+        </div>
+        <p id="confirmMessage"></p>
+        <div class="modal__actions">
+          <button class="secondary-button" type="button" data-close-modal>Cancel</button>
+          <button class="primary-button danger" id="confirmStrike" type="button">Confirm</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="app.js?v=20260727-live-map-2"></script>
+  <script src="app.js?v=20260727-support-1"></script>
 </body>
 </html>

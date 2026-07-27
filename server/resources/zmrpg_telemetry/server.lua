@@ -1,5 +1,10 @@
 local ENDPOINT = "http://127.0.0.1:18080/api/telemetry"
+local RESULT_ENDPOINT = "http://127.0.0.1:18080/api/game/result"
 local SNAPSHOT_INTERVAL = 5000
+local ACTION_COSTS = {
+	artillery = 50,
+	airstrike = 75
+}
 
 local runtimeIds = {
 	player = {},
@@ -16,6 +21,8 @@ local nextRuntimeId = {
 	radararea = 1
 }
 local requestInFlight = false
+local trackedAccounts = {}
+local pendingActions = {}
 
 local MARKER_LABELS = {
 	{ -2519.07910, 2340.07764, "Skin shop" },
@@ -35,8 +42,7 @@ local MARKER_LABELS = {
 	{ 286.46869, -86.77403, "Armory exit" },
 	{ 296.40015, -80.81145, "Armory supplies" },
 	{ -2444.66455, 754.34698, "Warehouse" },
-	{ -2441.75415, 754.66119, "Warehouse" },
-	{ -2597.31299, 2364.65918, "Mission contact" }
+	{ -2441.75415, 754.66119, "Warehouse" }
 }
 
 local SAFE_ZONE_LABELS = {
@@ -133,6 +139,20 @@ local function collectPlayers()
 	return result
 end
 
+local function collectTrackedAccounts()
+	local result = {}
+	for username in pairs(trackedAccounts) do
+		local account = getAccount(username)
+		if account then
+			table.insert(result, {
+				username = getAccountName(account),
+				materials = tonumber(getAccountData(account, "materials")) or 0
+			})
+		end
+	end
+	return result
+end
+
 local function collectZombies()
 	local result = {}
 	for _, ped in ipairs(getElementsByType("ped")) do
@@ -218,6 +238,266 @@ local function collectSafeZones()
 	return result
 end
 
+local function postGameResult(payload)
+	local postData = toJSON(payload, true)
+	setTimer(function(data)
+		fetchRemote(RESULT_ENDPOINT, {
+			queueName = "zmrpg-results",
+			connectionAttempts = 2,
+			connectTimeout = 2500,
+			method = "POST",
+			postData = data,
+			headers = {
+				["Content-Type"] = "application/json"
+			}
+		}, function(responseData, responseInfo)
+			if type(responseInfo) == "table" and not responseInfo.success then
+				outputDebugString(
+					"[zmrpg_telemetry] Result upload failed: "
+						.. tostring(responseInfo.statusCode or responseInfo.failureReason)
+						.. " "
+						.. tostring(responseData),
+					2
+				)
+			end
+		end)
+	end, 50, 1, postData)
+end
+
+local function actionBalance(action)
+	local account = getAccount(action.username)
+	return account and (tonumber(getAccountData(account, "materials")) or 0) or 0
+end
+
+local function failAction(action, message)
+	pendingActions[action.id] = nil
+	postGameResult({
+		kind = "action",
+		id = action.id,
+		success = false,
+		message = message,
+		materials = actionBalance(action)
+	})
+end
+
+local function nearestStrikeExecutor(x, y)
+	local nearestPlayer
+	local nearestDistance
+	for _, player in ipairs(getElementsByType("player")) do
+		if getElementInterior(player) == 0 and getElementDimension(player) == 0 then
+			local playerX, playerY = getElementPosition(player)
+			local distance = getDistanceBetweenPoints2D(x, y, playerX, playerY)
+			if not nearestDistance or distance < nearestDistance then
+				nearestPlayer = player
+				nearestDistance = distance
+			end
+		end
+	end
+	return nearestPlayer
+end
+
+local function startAirstrikeAircraft(action, groundZ)
+	local startX = action.x - 900
+	local endX = action.x + 900
+	local altitude = groundZ + 300
+	local aircraft = createVehicle(520, startX, action.y, altitude, 0, 0, 270)
+	if not aircraft then
+		return false
+	end
+
+	setElementData(aircraft, "zmrpgStrikeAircraft", true)
+	setElementData(aircraft, "vehicleOwner", action.username)
+	setElementCollisionsEnabled(aircraft, false)
+	setVehicleDamageProof(aircraft, true)
+	setElementFrozen(aircraft, true)
+
+	local step = 0
+	setTimer(function()
+		if not isElement(aircraft) then
+			return
+		end
+		step = step + 1
+		local progress = step / 100
+		setElementPosition(
+			aircraft,
+			startX + ((endX - startX) * progress),
+			action.y,
+			altitude,
+			false
+		)
+		setElementRotation(aircraft, 0, 0, 270)
+		if step >= 100 then
+			destroyElement(aircraft)
+		end
+	end, 100, 100)
+
+	return aircraft
+end
+
+local function handleAuthenticationRequests(requests)
+	if type(requests) ~= "table" then
+		return
+	end
+
+	for _, request in ipairs(requests) do
+		if type(request) == "table" then
+			local username = tostring(request.username or "")
+			local account = getAccount(username, tostring(request.password or ""))
+			postGameResult({
+				kind = "auth",
+				id = tostring(request.id or ""),
+				success = account and true or false,
+				username = account and getAccountName(account) or username,
+				materials = account and (tonumber(getAccountData(account, "materials")) or 0) or 0
+			})
+		end
+	end
+end
+
+local function handleStrikeRequests(actions)
+	if type(actions) ~= "table" then
+		return
+	end
+
+	for _, rawAction in ipairs(actions) do
+		if type(rawAction) == "table" then
+			local action = {
+				id = tostring(rawAction.id or ""),
+				username = tostring(rawAction.username or ""),
+				type = tostring(rawAction.type or ""),
+				x = tonumber(rawAction.x),
+				y = tonumber(rawAction.y)
+			}
+			local cost = ACTION_COSTS[action.type]
+			if action.id == "" or action.username == "" or not cost or not action.x or not action.y then
+				failAction(action, "The strike request was malformed.")
+			elseif action.x < -3000 or action.x > 3000 or action.y < -3000 or action.y > 3000 then
+				failAction(action, "The target is outside San Andreas.")
+			elseif not pendingActions[action.id] then
+				local executor = nearestStrikeExecutor(action.x, action.y)
+				if not executor then
+					failAction(action, "At least one player must be online to execute a strike.")
+				else
+					action.cost = cost
+					action.executor = executor
+					pendingActions[action.id] = action
+					triggerClientEvent(
+						executor,
+						"zmrpg:prepareStrike",
+						resourceRoot,
+						action.id,
+						action.type,
+						action.x,
+						action.y
+					)
+					setTimer(function(actionId)
+						local pending = pendingActions[actionId]
+						if pending then
+							failAction(pending, "The target area could not be prepared in time.")
+						end
+					end, 15000, 1, action.id)
+				end
+			end
+		end
+	end
+end
+
+local function handleBackendCommands(responseData)
+	local response = fromJSON(responseData)
+	if type(response) ~= "table" then
+		return
+	end
+
+	handleAuthenticationRequests(response.authRequests)
+	handleStrikeRequests(response.actions)
+
+	if type(response.accounts) == "table" then
+		trackedAccounts = {}
+		for _, username in ipairs(response.accounts) do
+			if type(username) == "string" and username ~= "" then
+				trackedAccounts[username] = true
+			end
+		end
+	end
+end
+
+addEvent("zmrpg:strikeGroundReady", true)
+addEventHandler("zmrpg:strikeGroundReady", resourceRoot, function(actionId, success, groundZ, errorMessage)
+	local action = pendingActions[tostring(actionId or "")]
+	if not action or client ~= action.executor then
+		return
+	end
+	if not success then
+		failAction(action, tostring(errorMessage or "Ground height could not be resolved."))
+		return
+	end
+
+	groundZ = tonumber(groundZ)
+	if not groundZ or groundZ < -100 or groundZ > 2000 then
+		failAction(action, "The target ground height was invalid.")
+		return
+	end
+
+	local account = getAccount(action.username)
+	if not account then
+		failAction(action, "The game account no longer exists.")
+		return
+	end
+	local materials = tonumber(getAccountData(account, "materials")) or 0
+	if materials < action.cost then
+		failAction(action, "Not enough materials.")
+		return
+	end
+
+	local aircraft = false
+	if action.type == "airstrike" then
+		aircraft = startAirstrikeAircraft(action, groundZ)
+		if not aircraft then
+			failAction(action, "The strike aircraft could not be created.")
+			return
+		end
+	end
+
+	materials = materials - action.cost
+	if not setAccountData(account, "materials", materials) then
+		if isElement(aircraft) then
+			destroyElement(aircraft)
+		end
+		failAction(action, "The material balance could not be updated.")
+		return
+	end
+
+	pendingActions[action.id] = nil
+	triggerClientEvent(
+		action.executor,
+		"zmrpg:executeStrike",
+		resourceRoot,
+		action.id,
+		action.type,
+		action.x,
+		action.y,
+		groundZ,
+		aircraft
+	)
+	outputChatBox(
+		"[Support] "
+			.. action.username
+			.. " called an "
+			.. (action.type == "artillery" and "artillery strike." or "airstrike."),
+		root,
+		255,
+		196,
+		92
+	)
+	postGameResult({
+		kind = "action",
+		id = action.id,
+		success = true,
+		message = action.type == "artillery" and "Artillery strike dispatched." or "Airstrike dispatched.",
+		materials = materials
+	})
+end)
+
 local function sendSnapshot()
 	if requestInFlight then
 		return
@@ -235,7 +515,8 @@ local function sendSnapshot()
 		zombies = collectZombies(),
 		vehicles = collectVehicles(),
 		markers = collectMarkers(),
-		safeZones = collectSafeZones()
+		safeZones = collectSafeZones(),
+		accounts = collectTrackedAccounts()
 	}
 
 	requestInFlight = true
@@ -251,7 +532,9 @@ local function sendSnapshot()
 	}, function(responseData, responseInfo)
 		requestInFlight = false
 		if type(responseInfo) == "table" then
-			if not responseInfo.success then
+			if responseInfo.success then
+				handleBackendCommands(responseData)
+			else
 				outputDebugString(
 					"[zmrpg_telemetry] Snapshot upload failed: "
 						.. tostring(responseInfo.statusCode or responseInfo.failureReason)

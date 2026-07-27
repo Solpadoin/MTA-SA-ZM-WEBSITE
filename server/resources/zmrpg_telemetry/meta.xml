@@ -1,5 +1,6 @@
 <meta>
-	<info author="Solpadoin" name="Zombie RPG Telemetry" version="1.0.0" type="script" />
-	<min_mta_version server="1.5.4-9.11342" />
+	<info author="Solpadoin" name="Zombie RPG Telemetry and Support" version="2.0.0" type="script" />
+	<min_mta_version client="1.6.0-9.22678" server="1.6.0-9.22678" />
 	<script src="server.lua" type="server" />
+	<script src="client.lua" type="client" cache="false" />
 </meta>

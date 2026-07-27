@@ -19,6 +19,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body,
 .app {
@@ -37,6 +41,13 @@ button,
 a,
 input {
   font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 
 .app {
@@ -132,11 +143,13 @@ h1 span {
 
 .topbar__actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .icon-button,
+.account-button,
 .join-button {
   min-height: 40px;
   display: inline-flex;
@@ -154,6 +167,12 @@ h1 span {
   background: var(--surface-raised);
 }
 
+.account-button {
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--surface-raised);
+}
+
 .join-button {
   gap: 8px;
   padding: 0 15px;
@@ -164,16 +183,58 @@ h1 span {
   text-decoration: none;
 }
 
-.icon-button:hover {
+.icon-button:hover,
+.account-button:hover {
   background: var(--surface-hover);
 }
 
 .icon-button svg,
+.account-button svg,
 .join-button svg,
 .telemetry-state svg {
   width: 17px;
   height: 17px;
   stroke-width: 2;
+}
+
+.account-summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+
+.account-summary > div {
+  display: grid;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.account-summary strong {
+  max-width: 130px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-summary span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.account-summary span b {
+  color: var(--amber);
+}
+
+.account-summary .icon-button {
+  min-height: 38px;
+  border-width: 0 0 0 1px;
+  border-radius: 0 5px 5px 0;
 }
 
 .map-workspace {
@@ -342,18 +403,29 @@ h2 {
   background: var(--red);
 }
 
-.legend-dot.vehicle {
-  background: var(--amber);
-}
-
 .legend-dot.game-marker {
-  background: var(--violet);
+  background: var(--red);
 }
 
 .legend-dot.safe-zone {
   border-color: var(--green);
   border-radius: 2px;
   background: rgba(154, 242, 119, 0.42);
+}
+
+.legend-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.legend-icon svg {
+  width: 14px;
+  height: 14px;
+  color: var(--amber);
+  stroke-width: 2.5;
 }
 
 .telemetry-state {
@@ -439,15 +511,39 @@ h2 {
 }
 
 .entity-marker.vehicle {
-  --entity-marker-size: 12px;
-  border-radius: 3px;
-  background: var(--amber);
+  --entity-marker-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  color: var(--amber);
+  background: transparent;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.8));
+  box-shadow: none;
+}
+
+.entity-marker.vehicle::after {
+  display: none;
+}
+
+.entity-marker.vehicle svg {
+  width: 100%;
+  height: 100%;
+  fill: rgba(16, 20, 16, 0.82);
+  stroke: currentColor;
+  stroke-width: 2.5;
 }
 
 .entity-marker.game-marker {
-  --entity-marker-size: 13px;
-  border-radius: 2px 50% 50%;
-  background: var(--violet);
+  --entity-marker-size: 10px;
+  border-width: 1px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.entity-marker.game-marker::after {
+  display: none;
 }
 
 .leaflet-popup-content-wrapper,
@@ -502,6 +598,220 @@ h2 {
   text-align: right;
 }
 
+.map-context-menu {
+  z-index: 850;
+  position: absolute;
+  width: 212px;
+  overflow: hidden;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(16, 20, 16, 0.98);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.48);
+}
+
+.map-context-menu button {
+  width: 100%;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-context-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.map-context-menu button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.map-context-menu button svg {
+  width: 19px;
+  height: 19px;
+  color: var(--amber);
+}
+
+.map-context-menu button span {
+  display: grid;
+  gap: 2px;
+}
+
+.map-context-menu button strong {
+  font-size: 12px;
+}
+
+.map-context-menu button small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.modal-backdrop {
+  z-index: 2000;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5, 8, 6, 0.72);
+  backdrop-filter: blur(5px);
+}
+
+.modal {
+  width: min(390px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+}
+
+.modal__header {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px 12px 17px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal__header h2 {
+  margin-top: 2px;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.login-form label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.login-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: #0f130f;
+}
+
+.form-error {
+  min-height: 16px;
+  margin: -4px 0 0;
+  color: #ff9696;
+  font-size: 11px;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-button {
+  color: #0b1209;
+  border-color: transparent;
+  background: var(--green);
+}
+
+.primary-button.danger {
+  color: #fff;
+  background: var(--red);
+}
+
+.secondary-button {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.primary-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.confirmation {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.confirmation p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirmation__target {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #0f130f;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
+.confirmation__target svg {
+  width: 17px;
+  color: var(--red);
+}
+
+.modal__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.toast {
+  z-index: 2500;
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 11px 14px;
+  border: 1px solid rgba(154, 242, 119, 0.35);
+  border-radius: 6px;
+  color: var(--text);
+  background: #1a2518;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.48);
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.toast.error {
+  border-color: rgba(227, 79, 79, 0.45);
+  background: #2a1717;
+}
+
 @media (max-width: 760px) {
   .topbar {
     min-height: 62px;
@@ -528,6 +838,24 @@ h2 {
   }
 
   .join-button span {
+    display: none;
+  }
+
+  .account-button {
+    width: 40px;
+    padding: 0;
+  }
+
+  .account-button span,
+  .account-summary strong {
+    display: none;
+  }
+
+  .account-summary {
+    padding-left: 9px;
+  }
+
+  #copyAddress {
     display: none;
   }
 

@@ -16,6 +16,30 @@ BLOCK = """    # BEGIN ZMRPG TELEMETRY
         proxy_set_header X-Real-IP $remote_addr;
         proxy_read_timeout 5s;
     }
+
+    location ^~ /mta/api/auth/ {
+        proxy_pass http://127.0.0.1:18080/api/auth/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 20s;
+    }
+
+    location = /mta/api/actions {
+        proxy_pass http://127.0.0.1:18080/api/actions;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 10s;
+    }
+
+    location ^~ /mta/api/actions/ {
+        proxy_pass http://127.0.0.1:18080/api/actions/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 10s;
+    }
     # END ZMRPG TELEMETRY
 
 """

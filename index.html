@@ -3,62 +3,108 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zombie Mod RPG (2011) | MTA:SA</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#101410">
+  <title>Zombie Mod RPG (2011) | Live Map</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="style.css?v=20260727-live-map-1">
 </head>
 <body>
-  <main class="shell">
-    <section class="hero">
-      <div class="hero__copy">
-        <p class="kicker">MTA: San Andreas</p>
-        <h1>Zombie Mod RPG (2011)</h1>
-        <p class="lead">A survival RPG server with progression, safe zones, missions, crafting, factions, vehicle shops, and roaming zombie waves.</p>
-        <div class="actions">
-          <a class="button primary" href="mtasa://141.105.130.229:22003">Join Server</a>
-          <button class="button" id="copyAddress" type="button">Copy IP</button>
-        </div>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__game">MTA: San Andreas</span>
+        <h1>Zombie Mod RPG <span>(2011)</span></h1>
       </div>
-      <div class="status-panel" aria-live="polite">
-        <div class="status-line">
-          <span class="dot" id="statusDot"></span>
-          <span id="statusText">Checking server...</span>
-        </div>
-        <div class="metric">
-          <span>Online</span>
-          <strong id="players">- / 100</strong>
-        </div>
-        <div class="metric">
-          <span>Map</span>
-          <strong id="map">-</strong>
-        </div>
-        <div class="metric">
-          <span>Mode</span>
-          <strong id="gamemode">Zombie RPG</strong>
-        </div>
-      </div>
-    </section>
 
-    <section class="grid">
-      <article>
-        <h2>Address</h2>
-        <p class="server-address">141.105.130.229:22003</p>
-        <p>Connect through the MTA server browser or use the quick join link above.</p>
-      </article>
-      <article>
-        <h2>Features</h2>
-        <ul>
-          <li>100 player slots</li>
-          <li>Zombie Survival RPG</li>
-          <li>Account-based progression</li>
-          <li>Crafting, missions, factions, and shops</li>
-        </ul>
-      </article>
-      <article class="wide">
-        <h2>Recent Events</h2>
-        <div class="log" id="events">Server events will appear after startup.</div>
-      </article>
-    </section>
-  </main>
-  <script src="app.js?v=20260724-vps-backend-2"></script>
+      <div class="server-state" aria-live="polite">
+        <span class="status-dot" id="statusDot"></span>
+        <div>
+          <strong id="statusText">Checking server</strong>
+          <span id="serverDetails">141.105.130.229:22003</span>
+        </div>
+      </div>
+
+      <div class="topbar__actions">
+        <button class="icon-button" id="copyAddress" type="button" title="Copy server address" aria-label="Copy server address">
+          <i data-lucide="copy"></i>
+        </button>
+        <a class="join-button" href="mtasa://141.105.130.229:22003">
+          <i data-lucide="log-in"></i>
+          <span>Join server</span>
+        </a>
+      </div>
+    </header>
+
+    <main class="map-workspace">
+      <div id="map" aria-label="Live GTA San Andreas server map"></div>
+
+      <aside class="map-panel" aria-label="Map layers">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Live world</span>
+            <h2>Map layers</h2>
+          </div>
+          <span class="updated" id="updatedAt">Waiting for data</span>
+        </div>
+
+        <div class="world-counts">
+          <div><strong id="playerCount">0</strong><span>online</span></div>
+          <div><strong id="zombieCount">0</strong><span>zombies</span></div>
+          <div><strong id="vehicleCount">0</strong><span>vehicles</span></div>
+        </div>
+
+        <div class="layer-list">
+          <label>
+            <input type="checkbox" data-layer="players" checked>
+            <span class="legend-dot player"></span>
+            <span>Online players</span>
+            <strong id="onlineLayerCount">0</strong>
+          </label>
+          <label>
+            <input type="checkbox" data-layer="offline" checked>
+            <span class="legend-dot offline"></span>
+            <span>Last known players</span>
+            <strong id="offlineLayerCount">0</strong>
+          </label>
+          <label>
+            <input type="checkbox" data-layer="zombies" checked>
+            <span class="legend-dot zombie"></span>
+            <span>Zombies</span>
+            <strong id="zombieLayerCount">0</strong>
+          </label>
+          <label>
+            <input type="checkbox" data-layer="vehicles" checked>
+            <span class="legend-dot vehicle"></span>
+            <span>Vehicles</span>
+            <strong id="vehicleLayerCount">0</strong>
+          </label>
+          <label>
+            <input type="checkbox" data-layer="markers" checked>
+            <span class="legend-dot game-marker"></span>
+            <span>Game markers</span>
+            <strong id="markerLayerCount">0</strong>
+          </label>
+          <label>
+            <input type="checkbox" data-layer="safeZones" checked>
+            <span class="legend-dot safe-zone"></span>
+            <span>Safe zones</span>
+            <strong id="safeZoneLayerCount">0</strong>
+          </label>
+        </div>
+
+        <div class="telemetry-state" id="telemetryState">
+          <i data-lucide="radio"></i>
+          <span>Connecting to world telemetry</span>
+        </div>
+      </aside>
+
+      <div class="coordinate-readout" id="coordinateReadout">X 0.0 · Y 0.0</div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="app.js?v=20260727-live-map-1"></script>
 </body>
 </html>

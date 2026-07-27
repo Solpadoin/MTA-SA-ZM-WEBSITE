@@ -1,38 +1,56 @@
-# MTA:SA Zombie Mod RPG Website
+# MTA:SA Zombie Mod RPG
 
-GitHub Pages frontend for the **Zombie Mod RPG (2011)** Multi Theft Auto: San Andreas server.
+GitHub Pages frontend and VPS integration for **Zombie Mod RPG (2011)**.
 
-## Server
+## Live Services
 
-- Address: `141.105.130.229:22003`
-- Slots: `100`
-- Game: Multi Theft Auto: San Andreas
-- Mode: Zombie Survival RPG
+- Website: `https://solpadoin.github.io/MTA-SA-ZM-WEBSITE/`
+- MTA server: `141.105.130.229:22003`
+- Status API: `https://141.105.130.229.sslip.io/mta/api/status`
+- World telemetry: `https://141.105.130.229.sslip.io/mta/api/telemetry`
 
-## What It Shows
+The frontend is a static GitHub Pages site. The VPS only runs the MTA server and a small Python API.
 
-- Server availability
-- Online and max player count
-- Current map and mode from the MTA ASE query port
-- Recent server log events
-- Quick `mtasa://` join link
+## Live Map
 
-## MTA Status API
+The `zmrpg_telemetry` MTA resource sends a world snapshot to the local API every five seconds. The public response contains:
 
-The frontend runs from GitHub Pages and polls the mini backend on the VPS:
+- Online players and last known positions for offline players
+- Zombies
+- Vehicles
+- Server-created markers
+- Zombie-proof safe zones
 
-```text
-https://141.105.130.229.sslip.io/mta/api/status
-```
+Player account names, IP addresses and serials are never returned by the public API. Stable public player IDs are SHA-256 hashes.
 
-For VPS deployment, run `backend/mta_status_api.py` on the same machine as the MTA server and proxy `/mta/api/status` to it with nginx.
+The map uses GTA world bounds from `-3000` to `3000` on both axes. MTA `(x, y)` coordinates map to Leaflet `[y, x]`.
 
-The API reads live MTA data from the ASE UDP port, which is `serverport + 123`. With the default MTA port this is:
+## Gameplay Deployment
 
-```text
-22003 UDP - game port
-22005 TCP - internal HTTP resource download port
-22126 UDP - ASE query port
-```
+Pushes to `main` automatically deploy gameplay, telemetry and backend changes through `.github/workflows/deploy-vps.yml`.
 
-This is different from the CS 1.6 website flow, which uses AMXX-exported JSON files.
+Required GitHub Actions secrets:
+
+| Secret | Value |
+| --- | --- |
+| `VDS_HOST` | VPS hostname or IP |
+| `VDS_USER` | SSH deployment user |
+| `VDS_SSH_KEY` | Private SSH key authorized on the VPS |
+
+Each deployment:
+
+1. Backs up the current MTA resources, MTA configuration, ACL, backend and nginx site.
+2. Overlays the maintained resource files.
+3. Enforces the 100-player configuration and a single copy of each gameplay system.
+4. Restarts and verifies MTA, nginx and the telemetry API.
+5. Restores the backup automatically if verification fails.
+
+Backups are stored under `/opt/mta-zombie-rpg/backups/`.
+
+## Network Ports
+
+- `22003/udp`: MTA game traffic
+- `22005/tcp`: MTA HTTP resource downloads
+- `22126/udp`: ASE server query (`game port + 123`)
+
+The telemetry ingestion endpoint is bound to `127.0.0.1:18080` and is not publicly writable.

@@ -1,0 +1,58 @@
+name: Deploy MTA server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "server/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-vps.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mta-zombie-rpg-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_SSH_KEY: ${{ secrets.VDS_SSH_KEY }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$VDS_SSH_KEY" > ~/.ssh/zmrpg_deploy
+          chmod 0600 ~/.ssh/zmrpg_deploy
+          ssh-keyscan -H "$VDS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload deployment bundle
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_USER: ${{ secrets.VDS_USER }}
+        run: |
+          remote_dir="/tmp/zmrpg-${GITHUB_SHA}"
+          ssh -i ~/.ssh/zmrpg_deploy "${VDS_USER}@${VDS_HOST}" "install -d -m 0700 '${remote_dir}'"
+          tar -czf - backend server deploy | ssh -i ~/.ssh/zmrpg_deploy "${VDS_USER}@${VDS_HOST}" "tar -xzf - -C '${remote_dir}'"
+          echo "REMOTE_DIR=${remote_dir}" >> "$GITHUB_ENV"
+
+      - name: Deploy and verify
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_USER: ${{ secrets.VDS_USER }}
+        run: |
+          ssh -i ~/.ssh/zmrpg_deploy "${VDS_USER}@${VDS_HOST}" "bash '${REMOTE_DIR}/deploy/deploy.sh' '${REMOTE_DIR}'"
+
+      - name: Remove deployment bundle
+        if: always()
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_USER: ${{ secrets.VDS_USER }}
+        run: |
+          ssh -i ~/.ssh/zmrpg_deploy "${VDS_USER}@${VDS_HOST}" "rm -rf -- '${REMOTE_DIR}'" || true

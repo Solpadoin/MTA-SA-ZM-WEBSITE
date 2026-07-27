@@ -1,0 +1,12 @@
+<meta>
+    <info author="4yvak" type="script" version="1.0" name="main" description="main" />
+
+    <script src="client.lua" type="client" cache="false" />
+	<script src="server.lua" type="server" />
+
+
+	<settings>
+		<setting name="*privateServer" value="no" friendlyname="Server Password" group="" accept="" examples="" desc="" />
+		<setting name="*gameSlots" value="[100]" friendlyname="Server Slots" group="" accept="" examples="" desc="Server Slots" />
+	</settings>
+</meta>

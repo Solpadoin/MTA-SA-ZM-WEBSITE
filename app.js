@@ -121,7 +121,7 @@ function toLatLng(position) {
 
 function icon(type) {
   const content = type === "vehicle"
-    ? `<span class="entity-marker vehicle"><i data-lucide="car-front"></i></span>`
+    ? `<span class="entity-marker vehicle"><i data-lucide="car"></i></span>`
     : `<span class="entity-marker ${type}"></span>`;
   return L.divIcon({
     className: "entity-icon",

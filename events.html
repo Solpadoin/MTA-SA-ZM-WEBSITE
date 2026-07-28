@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101410">
+  <title>Zombie Mod RPG (2011) | Recent Events</title>
+  <link rel="stylesheet" href="style.css?v=20260728-events-1">
+</head>
+<body class="events-page">
+  <div class="app events-app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__game">MTA: San Andreas</span>
+        <h1>Zombie Mod RPG <span>(2011)</span></h1>
+      </div>
+
+      <div class="server-state" aria-live="polite">
+        <span class="status-dot" id="statusDot"></span>
+        <div>
+          <strong id="statusText">Checking server</strong>
+          <span id="serverDetails">141.105.130.229:22003</span>
+        </div>
+      </div>
+
+      <div class="topbar__actions">
+        <a class="icon-button" href="./" title="Back to live map" aria-label="Back to live map">
+          <i data-lucide="map"></i>
+        </a>
+        <a class="join-button" href="mtasa://141.105.130.229:22003">
+          <i data-lucide="log-in"></i>
+          <span>Join server</span>
+        </a>
+      </div>
+    </header>
+
+    <main class="events-workspace">
+      <section class="event-console" aria-labelledby="eventsTitle">
+        <header class="event-console__header">
+          <div>
+            <span class="eyebrow">Server activity</span>
+            <h2 id="eventsTitle">Recent Events</h2>
+          </div>
+          <div class="event-console__actions">
+            <span class="event-count" id="eventCount">Loading history</span>
+            <button class="icon-button" id="refreshEvents" type="button" title="Refresh events" aria-label="Refresh events">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+        </header>
+
+        <div class="event-feed" id="eventFeed" tabindex="0" aria-label="Server event history">
+          <div class="event-rows" id="eventRows"></div>
+          <button class="event-load-more" id="loadOlder" type="button">Load older events</button>
+        </div>
+
+        <footer class="event-console__footer">
+          <span class="live-indicator"><span></span>Live updates</span>
+          <span id="eventFeedState">Newest events first. Scroll down for older history.</span>
+        </footer>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="events.js?v=20260728-events-1"></script>
+</body>
+</html>

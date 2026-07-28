@@ -8,6 +8,7 @@ GitHub Pages frontend and VPS integration for **Zombie Mod RPG (2011)**.
 - MTA server: `141.105.130.229:22003`
 - Status API: `https://141.105.130.229.sslip.io/mta/api/status`
 - World telemetry: `https://141.105.130.229.sslip.io/mta/api/telemetry`
+- Server event history: `https://141.105.130.229.sslip.io/mta/api/events`
 
 The frontend is a static GitHub Pages site. The VPS only runs the MTA server and a small Python API.
 

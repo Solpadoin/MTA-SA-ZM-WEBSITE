@@ -6,6 +6,17 @@ from pathlib import Path
 BEGIN = "    # BEGIN ZMRPG TELEMETRY"
 END = "    # END ZMRPG TELEMETRY"
 BLOCK = """    # BEGIN ZMRPG TELEMETRY
+    location = /mta/api/events {
+        limit_except GET {
+            deny all;
+        }
+        proxy_pass http://127.0.0.1:18080/api/events;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 5s;
+    }
+
     location = /mta/api/telemetry {
         limit_except GET {
             deny all;

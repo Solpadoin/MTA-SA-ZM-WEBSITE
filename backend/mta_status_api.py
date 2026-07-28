@@ -13,14 +13,17 @@ from contextlib import contextmanager
 from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 SERVER_HOST = os.environ.get("MTA_HOST", "127.0.0.1")
 SERVER_PORT = int(os.environ.get("MTA_PORT", "22003"))
 ASE_PORT = int(os.environ.get("MTA_ASE_PORT", str(SERVER_PORT + 123)))
 STATE_PATH = Path(os.environ.get("MTA_TELEMETRY_STATE", "/var/lib/mta-zombie-web/telemetry.json"))
 DATABASE_PATH = Path(os.environ.get("MTA_WEB_DATABASE", "/var/lib/mta-zombie-web/auth.db"))
+LOG_PATH = Path(os.environ.get("MTA_LOG", "/opt/mta-zombie-rpg/mods/deathmatch/logs/server.log"))
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
+DEFAULT_EVENT_LIMIT = 80
+MAX_EVENT_LIMIT = 200
 SESSION_TTL = 24 * 60 * 60
 AUTH_TIMEOUT = 14
 ACTION_TYPES = {
@@ -38,6 +41,13 @@ DATABASE_LOCK = threading.Lock()
 AUTH_CONDITION = threading.Condition()
 AUTH_REQUESTS = {}
 LOGIN_ATTEMPTS = {}
+EVENT_CACHE_LOCK = threading.Lock()
+EVENT_CACHE = {"signature": None, "events": []}
+
+EVENT_TIMESTAMP_PATTERN = re.compile(r"^\[([^\]]+)\]\s*(.*)$")
+EVENT_ADDRESS_PATTERN = re.compile(r"\s+\(IP:\s*[^)]*\)", re.IGNORECASE)
+EVENT_IPV4_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+EVENT_SERIAL_PATTERN = re.compile(r"\bSerial:\s*[A-F0-9]+\b", re.IGNORECASE)
 
 
 def read_row(payload, start):
@@ -60,6 +70,86 @@ def query_mta():
         start, value = read_row(payload, start)
         result[field] = value
     return result
+
+
+def sanitize_event_line(line):
+    line = line.strip()
+    if not line or re.search(r"(?:^|\]\s*)CHAT:", line, re.IGNORECASE):
+        return None
+
+    line = EVENT_ADDRESS_PATTERN.sub("", line)
+    line = EVENT_IPV4_PATTERN.sub("[redacted]", line)
+    line = EVENT_SERIAL_PATTERN.sub("Serial: [redacted]", line)
+    line = re.sub(
+        r"(?i)(password\s+changed\s+to:)\s*.*$",
+        r"\1 [redacted]",
+        line,
+    )
+    return line
+
+
+def event_kind(message):
+    upper = message.upper()
+    if "ERROR:" in upper or upper.startswith("ERROR"):
+        return "error"
+    if "WARNING:" in upper or upper.startswith("WARNING"):
+        return "warning"
+    if any(token in upper for token in ("CONNECT:", "JOIN:", "LOGIN:")):
+        return "player"
+    if any(token in upper for token in ("QUIT:", "DISCONNECT:")):
+        return "leave"
+    if any(token in upper for token in ("STRIKE", "ARTILLERY", "AIRSTRIKE", "MATERIALS")):
+        return "tactical"
+    return "system"
+
+
+def load_public_events():
+    try:
+        stat = LOG_PATH.stat()
+    except OSError:
+        return []
+
+    signature = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    with EVENT_CACHE_LOCK:
+        if EVENT_CACHE["signature"] == signature:
+            return EVENT_CACHE["events"]
+
+        try:
+            lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return []
+
+        events = []
+        for line_number, raw_line in enumerate(lines):
+            line = sanitize_event_line(raw_line)
+            if not line:
+                continue
+            match = EVENT_TIMESTAMP_PATTERN.match(line)
+            timestamp = match.group(1) if match else None
+            message = match.group(2) if match else line
+            events.append({
+                "id": f"{stat.st_ino:x}-{line_number}",
+                "sequence": len(events),
+                "timestamp": timestamp,
+                "kind": event_kind(message),
+                "message": message,
+            })
+
+        EVENT_CACHE["signature"] = signature
+        EVENT_CACHE["events"] = events
+        return events
+
+
+def event_page(limit=DEFAULT_EVENT_LIMIT, before=None):
+    events = load_public_events()
+    end = len(events) if before is None else max(0, min(int(before), len(events)))
+    start = max(0, end - limit)
+    return {
+        "events": list(reversed(events[start:end])),
+        "nextCursor": start if start > 0 else None,
+        "total": len(events),
+        "generatedAt": int(time.time()),
+    }
 
 
 def empty_telemetry():
@@ -519,9 +609,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path = urlsplit(self.path).path
+        parsed = urlsplit(self.path)
+        path = parsed.path
         if path == "/api/telemetry":
             self.send_json(200, public_telemetry())
+            return
+        if path == "/api/events":
+            query = parse_qs(parsed.query)
+            try:
+                limit = int(query.get("limit", [DEFAULT_EVENT_LIMIT])[0])
+                before_value = query.get("before", [None])[0]
+                before = int(before_value) if before_value is not None else None
+            except (TypeError, ValueError):
+                self.send_json(400, {"ok": False, "error": "Invalid event cursor."})
+                return
+            limit = max(20, min(limit, MAX_EVENT_LIMIT))
+            self.send_json(200, event_page(limit, before))
             return
         if path == "/api/auth/session":
             user = self.require_session()

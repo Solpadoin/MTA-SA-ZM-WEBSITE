@@ -23,6 +23,9 @@ REQUIRED_RESOURCES = (
     "ZSolp",
     "zmrpg_telemetry",
 )
+MIN_CLIENT_VERSION = "1.6.0-9.22678.0"
+RECOMMENDED_CLIENT_VERSION = "1.6.0-9.24103.0"
+HTTP_DOWNLOAD_URL = "http://141.105.130.229/mta-download"
 
 
 def parse_xml(path):
@@ -34,13 +37,20 @@ def configure_server(path):
     tree = parse_xml(path)
     root = tree.getroot()
 
-    server_name = root.find("servername")
-    if server_name is not None:
-        server_name.text = "Zombie Mod RPG (2011)"
-
-    max_players = root.find("maxplayers")
-    if max_players is not None:
-        max_players.text = "100"
+    settings = {
+        "servername": "Zombie Mod RPG (2011)",
+        "maxplayers": "100",
+        "minclientversion": MIN_CLIENT_VERSION,
+        "minclientversion_auto_update": "0",
+        "recommendedclientversion": RECOMMENDED_CLIENT_VERSION,
+        "httpdownloadurl": HTTP_DOWNLOAD_URL,
+        "httpmaxconnectionsperclient": "8",
+    }
+    for name, value in settings.items():
+        node = root.find(name)
+        if node is None:
+            raise RuntimeError(f"Expected <{name}> setting was not found")
+        node.text = value
 
     resources = [node for node in root.findall("resource") if node.get("src")]
     for node in resources:

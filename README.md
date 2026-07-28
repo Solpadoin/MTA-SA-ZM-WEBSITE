@@ -9,6 +9,7 @@ GitHub Pages frontend and VPS integration for **Zombie Mod RPG (2011)**.
 - Status API: `https://141.105.130.229.sslip.io/mta/api/status`
 - World telemetry: `https://141.105.130.229.sslip.io/mta/api/telemetry`
 - Server event history: `https://141.105.130.229.sslip.io/mta/api/events`
+- Resource FastDL: `http://141.105.130.229/mta-download`
 
 The frontend is a static GitHub Pages site. The VPS only runs the MTA server and a small Python API.
 
@@ -43,8 +44,9 @@ Each deployment:
 1. Backs up the current MTA resources, MTA configuration, ACL, backend and nginx site.
 2. Overlays the maintained resource files.
 3. Enforces the 100-player configuration and a single copy of each gameplay system.
-4. Restarts and verifies MTA, nginx and the telemetry API.
-5. Restores the backup automatically if verification fails.
+4. Configures nginx FastDL with gzip and eight parallel download connections.
+5. Restarts and verifies MTA, nginx, FastDL and the telemetry API.
+6. Restores the backup automatically if verification fails.
 
 Backups are stored under `/opt/mta-zombie-rpg/backups/`.
 
